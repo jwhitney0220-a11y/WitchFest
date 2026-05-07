@@ -1,0 +1,26 @@
+[
+  {
+    "id": "DM_T1_001",
+    "name": "Coven Ash",
+    "family": "dark_magic",
+    "tier": 1,
+    "cost": 2,
+    "statRoll": { "healthMin": 45, "healthMax": 80, "damageMin": 15, "damageMax": 32 },
+    "keywords": ["Burn", "Vulnerable"],
+    "targeting": { "mode": "lane_auto", "priority": ["guard", "marked", "mirrored", "weakest"] },
+    "onReveal": [{ "type": "damage", "amount": 24, "vfx": "purple_burn" }],
+    "persistent": [{ "type": "burn_tick", "amount": 8, "timing": "ritual_wheel_status" }],
+    "hookEligible": true,
+    "hook": {
+      "canDropActive": true,
+      "activeDropChance": 0.06,
+      "unlockCurrency": "coven_ash",
+      "unlockCost": 300,
+      "awakeningRecipeTags": ["ashen_covenant"]
+    },
+    "baseHealth": 0,
+    "baseWard": 0,
+    "basePower": 0,
+    "isTier3": false
+  }
+]

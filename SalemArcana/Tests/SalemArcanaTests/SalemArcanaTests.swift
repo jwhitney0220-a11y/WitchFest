@@ -64,4 +64,31 @@ final class SalemArcanaTests: XCTestCase {
         XCTAssertEqual(hand.count, 2)
         XCTAssertEqual(deck.cards.count, 1)
     }
+
+    func testJSONCardLoading() throws {
+        let cards: [CardDefinition] = try FixtureLoader.load(fileName: "cards")
+        XCTAssertEqual(cards.count, 1)
+
+        let ashCard = cards.first!
+        XCTAssertEqual(ashCard.id, "DM_T1_001")
+        XCTAssertEqual(ashCard.name, "Coven Ash")
+        XCTAssertEqual(ashCard.family, "dark_magic")
+        XCTAssertEqual(ashCard.tier, 1)
+        XCTAssertEqual(ashCard.cost, 2)
+
+        XCTAssertEqual(ashCard.statRoll?.healthMin, 45)
+        XCTAssertEqual(ashCard.statRoll?.healthMax, 80)
+
+        XCTAssertEqual(ashCard.keywords?.count, 2)
+        XCTAssertEqual(ashCard.keywords?.first, "Burn")
+
+        XCTAssertEqual(ashCard.targeting?.mode, "lane_auto")
+        XCTAssertEqual(ashCard.targeting?.priority.count, 4)
+
+        XCTAssertEqual(ashCard.onReveal?.first?.type, "damage")
+        XCTAssertEqual(ashCard.onReveal?.first?.amount, 24)
+
+        XCTAssertEqual(ashCard.hookEligible, true)
+        XCTAssertEqual(ashCard.hook?.unlockCost, 300)
+    }
 }
