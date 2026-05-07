@@ -1,0 +1,2979 @@
+SALEM ARCANA
+Master Game Guide & iOS Beta Engineer Handoff
+V9 FULL ENGINEER QC REBUILD - COMPLETE CANON PACKAGE
+Rebuilt after V8 was identified as a condensed QC document. V9 restores the
+full handoff structure while preserving the latest final rules.
+
+Latest canon corrections included: unlimited card plays within Witchfire budget, 1-card draw until Patient, 2-card draw
+after Patient, Patience countdown only when zero cards are played, Witchfire carryover only after Patient, Ritual Wheel
+combat, Seal Influence scoring, layered UI implementation, compact HUD Ritual Wheel badge.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 1
+
+0. V9 Completeness Notice
+Answer to the QC concern: V8 was shorter because it was a condensed clean-QC rebuild. It was useful as a
+rules summary, but it was not the full engineer handoff package. V9 restores the comprehensive content
+expected for engineering handoff: rules, UI locks, layering instructions, runtime data contracts, pseudocode,
+tutorial, AI guidance, hook economy, deck systems, dev tickets, AGENTS.md, QA, and lore/season context.
+Artifact
+
+Purpose
+
+Use for engineering?
+
+V5
+
+Large handoff with UI layering and wheel instructions, but
+predates the final Witchfire/draw/Patience corrections.
+
+Reference only; superseded when
+rules conflict.
+
+V8
+
+Condensed final-QC rules rebuild.
+
+Too short as a full handoff.
+
+V9
+
+Full engineer handoff rebuilt with all latest canon rules and
+full implementation detail.
+
+Use this as the primary handoff.
+
+1. Canon Locks - Final Engineer Source of Truth
+When this document conflicts with earlier PDFs, chat notes, images, or prototype assumptions, this V9
+document wins unless the conflict is strictly visual and the locked UI image is more specific. Blue text marks
+the most recent canon rules confirmed during final QC.
+Area
+
+Locked Rule
+
+Engineering Meaning
+
+Card play
+
+Players may play as many cards as their
+available Witchfire can afford.
+
+Remove every deprecated single-card play cap.
+Turn ends when player taps end turn, passes, or
+has no desired/legal plays.
+
+Draw cadence
+
+Draw 1 card per turn before Patient; draw 2
+cards per turn after Patient.
+
+Do not grant extra draws before Patient except
+scripted tutorial/debug tools.
+
+Witchfire curve
+
+Round 1=2, Round 2=3, Round 3=4, Round
+4=5, Round 5=6, Round 6=7, OT=7.
+
+Use this exact curve for both player and AI.
+
+Witchfire carryover
+
+Unused Witchfire is lost before Patient. After
+Patient, unused Witchfire carries over and
+stacks until spent.
+
+Carryover requires isPatient == true.
+
+Patience trigger
+
+Patience countdown decreases only if the
+player played zero cards that turn.
+
+Ending a turn after playing 1+ cards never
+decreases Patience.
+
+Patience UI
+
+Countdown starts at 3 in purple. At 0, notify
+player and turn countdown yellow.
+
+HUD must visually distinguish not-Patient vs
+Patient.
+
+Score
+
+Seal Influence is the official win score and
+appears in the Ritual Power counter.
+
+Ritual Power counter is not a separate resource in
+battle; it displays live score.
+
+Combat resolution
+
+End-of-turn combat resolves through the
+Ritual Wheel, lane by lane, sequentially.
+
+No simultaneous full-board trigger dump.
+
+Hooks
+
+Hooks are not granted as free starter hooks.
+They drop from packs/boss rewards or unlock
+with upgrade currency.
+
+Starter deck contains hook-eligible cards but not
+guaranteed active hooks.
+
+UI
+
+Locked supplied UI images are visual source
+of truth. All dynamic UI must be layered.
+
+Do not implement flat screenshots as final
+runtime screens.
+
+2. Full Core Match Rules
+2.1 Match Structure
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 2
+
+• Regular match: 6 rounds, followed by optional one-round overtime if the final regular Seal Influence scores
+are within 5% of each other.
+• Overtime: one OT round only. Final Seal Influence after OT is final even if scores remain within 5%.
+• Turn ownership: both player and opponent follow the same Witchfire curve, draw rules, patience trigger,
+card play budget, and Ritual Wheel resolution.
+• Turn action: a player may play any number of cards while available Witchfire can pay costs and legal
+slots/targets exist.
+• Pass/no-card turn: choosing to end a turn with zero cards played counts as a no-card turn and can reduce
+the Patience countdown.
+
+2.2 Witchfire / Energy
+Witchfire is the match resource used to pay card costs. It refreshes at the start of each round based on the
+fixed curve. Before Patient, unused Witchfire disappears at end of turn. After Patient, unused Witchfire banks
+and stacks until spent.
+Round
+
+Base Witchfire
+
+Carryover allowed before Patient?
+
+Carryover allowed after Patient?
+
+1
+
+2
+
+No
+
+Yes, if Patient has already been achieved by an
+earlier condition or debug/tutorial state.
+
+2
+
+3
+
+No
+
+Yes
+
+3
+
+4
+
+No
+
+Yes
+
+4
+
+5
+
+No
+
+Yes
+
+5
+
+6
+
+No
+
+Yes
+
+6
+
+7
+
+No
+
+Yes
+
+OT
+
+7
+
+No
+
+Yes
+
+2.3 Patience
+Patience is a comeback/planning state earned by skipping card plays over time. The countdown is not a pass
+button cooldown and not a generic end-turn counter. It only advances when the player ends a turn after
+playing zero cards.
+Situation
+
+Does Patience countdown
+decrease?
+
+Reason
+
+Player plays 0 cards and ends turn
+
+Yes, -1
+
+This is a true no-card turn.
+
+Player plays 1 card and ends turn
+
+No
+
+A card was played. Patience does not
+advance.
+
+Player plays 2+ cards and ends turn
+
+No
+
+A card was played. Patience does not
+advance.
+
+Player cannot afford any card but still has
+cards in hand
+
+Yes if they end with 0 cards
+played
+
+The trigger checks cardsPlayedThisTurn ==
+0.
+
+Player has no cards in hand
+
+Yes if they end with 0 cards
+played
+
+Still a no-card turn.
+
+Patient benefits: draw 2 cards at turn start instead of 1, unused Witchfire carries over and stacks, and UI
+changes countdown/Patient indicator from purple to yellow with a notification: "You are Patient."
+
+2.4 Turn State Pseudocode
+struct TurnState {
+var round: Int
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 3
+
+var
+var
+var
+var
+var
+var
+
+baseWitchfire: Int
+bankedWitchfire: Int
+availableWitchfire: Int
+cardsPlayedThisTurn: Int
+patienceCountdown: Int // starts at 3
+isPatient: Bool
+
+}
+func startTurn(_ state: inout TurnState, player: inout PlayerState) {
+state.baseWitchfire = witchfireForRound(state.round) // 2,3,4,5,6,7,7
+state.cardsPlayedThisTurn = 0
+state.availableWitchfire = state.baseWitchfire + (state.isPatient ? state.bankedWitchfire : 0)
+let drawCount = state.isPatient ? 2 : 1
+player.drawCards(drawCount)
+}
+func playCard(_ card: CardInstance, state: inout TurnState) throws {
+guard card.cost <= state.availableWitchfire else { throw PlayError.notEnoughWitchfire }
+guard board.hasLegalPlacement(card) else { throw PlayError.noLegalPlacement }
+state.availableWitchfire -= card.cost
+state.cardsPlayedThisTurn += 1
+board.place(card)
+}
+func endTurn(_ state: inout TurnState) {
+if state.cardsPlayedThisTurn == 0 && !state.isPatient {
+state.patienceCountdown = max(0, state.patienceCountdown - 1)
+if state.patienceCountdown == 0 { state.isPatient = true }
+}
+state.bankedWitchfire = state.isPatient ? state.availableWitchfire : 0
+}
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 4
+
+3. Seal Influence - Official Scoring and Win Condition
+Seal Influence is the only match-winning score. The game board UI currently labeled Ritual Power must
+display live Seal Influence. This keeps the locked UI composition while changing the runtime meaning of the
+counter.
+
+3.1 Scoring Components - Tutorial Order
+The tutorial must teach score in descending order of influence. Use this exact order so players understand
+what matters most.
+Order
+
+Score Factor
+
+Meaning
+
+Typical Impact
+
+1 - Most
+influential
+
+Lane Control
+
+Winning lane/point control grants the
+largest fixed score chunks.
+
++250 per controlled standard
+lane; +350 for center/awakened
+lane when active.
+
+2
+
+Surviving Board Value
+
+Surviving Health + Ward + current Power
+remains valuable at match end.
+
+Adds all surviving value.
+
+3
+
+Ritual Pressure
+
+Damage dealt becomes score pressure,
+rewarding aggressive turns.
+
+Total damage dealt x 0.25.
+
+4 - Least
+influential but
+dramatic
+
+Witness Marks
+
+Story/action achievements grant bonus
+score.
+
+Usually +25 to +180, higher for
+major awakenings.
+
+3.2 Final Score Formula
+LaneScore(lane, player) = sum(card.remainingHealth + card.remainingWard + card.currentPower)
+LaneControlBonus = 250 per standard controlled lane + 350 for center/awakened controlled lane
+SurvivingBoardValue = sum(all surviving health + ward + power)
+RitualPressure = floor(totalDamageDealt * 0.25)
+WitnessMarks = sum(triggeredWitnessMarkValues)
+SealInfluence = LaneControlBonus + SurvivingBoardValue + RitualPressure + WitnessMarks
+
+3.3 Overtime Rule
+At the end of Round 6, compare Seal Influence totals. If the scores are within 5% of each other, play one OT
+round using 7 Witchfire. Final Seal Influence after OT decides the winner. There is no second OT.
+let high = max(playerSealInfluence, opponentSealInfluence)
+let margin = abs(playerSealInfluence - opponentSealInfluence) / max(high, 1)
+if margin <= 0.05 { enterOneOvertimeRound() } else { highestSealInfluenceWins() }
+
+3.4 Witness Mark Examples
+Witness Mark
+
+Trigger
+
+Suggested Score
+
+First Awakening
+
+First player in match awakens a Tier 3.
+
++150
+
+Destroy Tier 3
+
+Destroy or banish a Tier 3 card.
+
++180
+
+Survive by Barrier
+
+Barrier prevents lethal or high damage.
+
++50
+
+Become Patient
+
+Patience reaches 0 for first time.
+
++50
+
+Chain on 3 Targets
+
+Chain effect hits 3 targets in one resolution.
+
++75
+
+Comeback Lane
+
+Take a lane while behind in Seal Influence.
+
++75
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 5
+
+4. Ritual Wheel Combat Resolution
+End-of-turn combat resolves through the Ritual Wheel. The wheel is a gameplay rule, an animation system,
+and a UI object. It prevents the board from firing all card effects at once.
+
+4.1 Lane Order
+Turn
+
+Lane Resolution Order
+
+1
+
+Top -> Left -> Right -> Awakened/Center
+
+2
+
+Left -> Right -> Top -> Awakened/Center
+
+3
+
+Right -> Top -> Left -> Awakened/Center
+
+4
+
+Top -> Left -> Right -> Awakened/Center
+
+5
+
+Left -> Right -> Top -> Awakened/Center
+
+6
+
+Right -> Top -> Left -> Awakened/Center
+
+OT
+
+Wheel continues from previous turn index or uses final highlighted OT order.
+
+4.2 Per-Lane Phase Order
+Phase
+
+Name
+
+What resolves
+
+1
+
+Defense Setup
+
+Guard, Ward, Barrier, protection redirection, legal target refresh.
+
+2
+
+Buff / Debuff
+
+Power buffs, Vulnerable, Marked, Cleanse, family damage bonus application flags.
+
+3
+
+Damage
+
+Primary attacks and direct damage effects.
+
+4
+
+Special Effects
+
+Chain, Cleave, Drain, Sacrifice, Echo, Hook, Awakening-related effects.
+
+5
+
+Death Cleanup
+
+Destroyed cards leave after current queued action, then death rewards/marks
+resolve.
+
+6
+
+Status Tick
+
+Burn, curse, temporary modifiers, duration cleanup.
+
+7
+
+Seal Influence Update
+
+Ritual Power counter updates after the lane/stack resolves.
+
+4.3 Card Order Within a Lane
+• On Reveal: newest card first, because the newly played card is the dramatic focal point of the turn.
+• Persistent effects: oldest card first, because board setup should matter.
+• Awakened/Tier 3 effects: resolve last within the lane unless card text explicitly overrides.
+• Death cleanup: destroyed cards remain visually present until the current action finishes, then exit cleanly.
+• Action queue: every effect creates a CombatAction with source, target, value, text label, VFX key, and score
+delta.
+
+4.4 CombatAction Data Contract
+struct CombatAction: Codable, Identifiable {
+let id: UUID
+let phase: RitualPhase
+let sourceCardInstanceID: UUID?
+let targetCardInstanceID: UUID?
+let targetLane: LaneID?
+let effectType: EffectType
+let amount: Int
+let impactLabel: String
+let vfxKey: String
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 6
+
+let sealInfluenceDelta: Int
+}
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 7
+
+5. Targeting System - Hybrid Ritual Targeting
+Salem Arcana uses fast lane-first targeting with selective focus targeting. Most cards resolve automatically
+based on board state; some cards request a player-tapped Focus Target.
+Priority
+
+Targeting Rule
+
+Example
+
+1
+
+Guarded target
+
+If enemy Guard is active in lane, hit Guard first.
+
+2
+
+Marked target
+
+Marked enemy is prioritized by targeted/random hostile hits.
+
+3
+
+Mirrored slot
+
+Attack the card directly opposite if present.
+
+4
+
+Weakest enemy in lane
+
+Default damage target when mirrored slot is empty.
+
+5
+
+Strongest enemy in lane
+
+Used by cards that hunt threats.
+
+6
+
+Random enemy in lane
+
+Used by chaotic effects. Must use deterministic seeded RNG.
+
+7
+
+Adjacent lane spillover
+
+Chain/Cleave may jump to adjacent lane if text allows.
+
+6. Cards, Stats, Keywords, and Impact Numbers
+6.1 Final Larger Stat Scale
+Tier
+
+Health
+
+Damage
+
+Ward / Shield
+
+Tier 1
+
+45-80
+
+15-32
+
+15-35
+
+Tier 2
+
+90-145
+
+35-65
+
+35-75
+
+Tier 3
+
+180-260
+
+70-115
+
+80-140
+
+Awakened
+
+300-420
+
+130-220
+
+150-260
+
+6.2 Keywords
+Keyword
+
+Effect
+
+Primary Families
+
+Guard
+
+Enemy attacks must hit this card first in its lane.
+
+Oathbound, Church
+
+Ward
+
+Shield value that absorbs damage before Health.
+
+Oathbound, Church, Spellbook
+
+Barrier
+
+Blocks the next damage instance completely.
+
+Church, Oathbound
+
+Marked
+
+Next targeted/random enemy hit prioritizes this card.
+
+Salem Folk, Spellbook
+
+Vulnerable
+
+Takes +25% damage from next hit.
+
+Dark Magic, Salem Folk
+
+Burn
+
+Takes damage at end of turn/status tick.
+
+Elemental, Dark Magic
+
+Chain
+
+Damage jumps to another enemy in same or adjacent lane.
+
+Elemental
+
+Cleave
+
+Hits primary target and adjacent slot targets.
+
+Elemental, Oathbound
+
+Drain
+
+Deals damage and heals source.
+
+Dark Magic
+
+Cleanse
+
+Removes Burn, Vulnerable, Marked, Curse.
+
+Church
+
+Echo
+
+Repeats a weaker version of an On Reveal effect.
+
+Spellbook
+
+Sacrifice
+
+Damages/destroys ally for larger payoff.
+
+Dark Magic
+
+6.3 Impact Number Rules
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 8
+
+Event
+
+Display Example
+
+Damage
+
+-72
+
+Ward gain
+
++95 WARD
+
+Healing
+
++48 RESTORE
+
+Buff
+
++25 POWER
+
+Debuff
+
+-30 CURSE
+
+Chain hit
+
+CHAIN -42
+
+Awakening hit
+
+AWAKENED -188
+
+Sacrifice payoff
+
+BLOOD PACT +120
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 9
+
+7. Decks, Starter Deck, Hooks, and Family Rituals
+7.1 Deck Rules
+• Deck size is exactly 20 cards.
+• The player can save multiple decks and choose one active deck.
+• A legal deck can contain exactly 1 Tier 3 anchor for the current beta rules.
+• Starter deck contains 1 chosen Tier 3, 6 Tier 2 cards, and 13 Tier 1 cards.
+• Starter deck must be mixed-family enough to teach the game and include examples of damage, Ward/Guard,
+heal/cleanse, buff/debuff, and lane effects.
+• Starter deck does not guarantee active hooks. Hook cards may be hook-eligible, but hook activation is
+earned later.
+
+7.2 Starter Deck Composition
+Card Group
+
+Count
+
+Notes
+
+Chosen Tier 3 Anchor
+
+1
+
+Player chooses 1 of 4 Season 1 anchors.
+
+Tier 2 Cards
+
+6
+
+Mixed families; should support basic tutorial coverage.
+
+Tier 1 Cards
+
+13
+
+Mixed families; should include defense, damage, support, and lane
+examples.
+
+Active Hooks
+
+0 guaranteed
+
+Hooks drop/unlock later; no free starter hooks.
+
+Total
+
+20
+
+Must validate before match start.
+
+7.3 Hook Economy
+Hooks are passive upgrade flags that allow a hook-eligible card to contribute to a Tier 3 awakening recipe. All
+hook cards have a random chance of dropping with the hook already active, but the chance is relatively low. A
+player may also unlock the hook using upgrade currency.
+Card Tier
+
+Hook Strength
+
+Drop Chance with Active
+Hook
+
+Upgrade Currency Cost
+
+Tier 1
+
+Standard
+
+6%
+
+300 Coven Ash
+
+Tier 1
+
+Strong
+
+3%
+
+375 Coven Ash
+
+Tier 1
+
+Signature
+
+1.5%
+
+450 Coven Ash
+
+Tier 2
+
+Standard
+
+3%
+
+800 Coven Ash
+
+Tier 2
+
+Strong
+
+1.5%
+
+1000 Coven Ash
+
+Tier 2
+
+Signature
+
+0.75%
+
+1200 Coven Ash
+
+7.4 Family Ritual Bonus Tiers
+Tier Name
+
+Requirement
+
+Bonus
+
+Ritual Apprentice
+
+>60% cards from one family and deck includes that
+family awakening card.
+
++10% damage on turns 3 and 5.
+
+Ritual Summoner
+
+>85% cards from one family and deck includes that
+family awakening card.
+
++10% damage on turns 3-6 and OT.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 10
+
+Tier Name
+
+Requirement
+
+Bonus
+
+Ritual Master
+
+100% cards from one family and deck includes that
+family awakening card.
+
+Damage bonus plus 15% chance
+awakened card starts in hand. If
+not, 50% chance to draw awakened
+card in first 5 turns.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 11
+
+8. Tutorial - Required First-Time Match Onboarding
+The tutorial must run before the player plays their first real match. It uses a controlled random legal 20-card
+tutorial deck. It must teach all basic mechanics, including Witchfire, multi-card plays, draw cadence, Patience,
+Ritual Wheel resolution, targeting, keywords, scoring, hooks, deck identity, and overtime.
+
+8.1 Tutorial Deck Requirements
+• 20 cards total.
+• Exactly 1 random Tier 3 from the four Season 1 anchors.
+• 6 Tier 2 cards and 13 Tier 1 cards.
+• At least 2 cards from each family.
+• At least 1 Guard/Ward card, 1 direct damage card, 1 chain/AoE card, 1 heal/cleanse card, and 1 buff/debuff
+card.
+• May include hook-eligible cards, but must teach that hooks are earned from packs/boss rewards or unlocked
+by currency.
+
+8.2 Tutorial Flow
+Step
+
+Lesson
+
+Implementation
+
+1
+
+Draw and hand basics
+
+Show 1-card draw before Patient and hand layout.
+
+2
+
+Witchfire basics
+
+Explain Witchfire curve and card costs.
+
+3
+
+Multi-card turn
+
+Force a turn where the player plays 2 low-cost cards because Witchfire allows it.
+
+4
+
+Placement
+
+Teach lanes/points and legal slots.
+
+5
+
+On Reveal
+
+Play a card and show immediate effect.
+
+6
+
+Persistent effects
+
+Show an end-turn effect entering the Ritual Wheel queue.
+
+7
+
+Guard/Ward/Barrier
+
+Demonstrate protection before damage.
+
+8
+
+Buff/debuff
+
+Apply Vulnerable or Marked, then show how it affects targeting/damage.
+
+9
+
+Hybrid targeting
+
+Show mirrored target, Guard override, and Focus Target card.
+
+10
+
+Ritual Wheel
+
+Show lane order and sequential resolution.
+
+11
+
+Scoring in order
+
+Teach Lane Control, Surviving Board Value, Ritual Pressure, Witness Marks.
+
+12
+
+No-card turn
+
+Player intentionally plays zero cards and ends turn; Patience countdown decreases.
+
+13
+
+Non-trigger example
+
+Player plays at least one card and ends turn; Patience countdown does not decrease.
+
+14
+
+Patient unlock
+
+After three true no-card turns, countdown hits 0, changes yellow, draw increases to 2,
+Witchfire carryover begins.
+
+15
+
+Hooks and awakening
+
+Explain hook economy and then script a tutorial-only awakening setup.
+
+16
+
+Overtime
+
+Explain within-5% OT rule if scores are close.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 12
+
+9. Locked UI References
+The following images are canonical visual locks. They define layout, mood, palette, typography style, frames,
+spacing, ornament language, and interaction pattern. They are not final flat runtime assets.
+Dynamic/animated elements must be split into layers and connected to state.
+
+UI Lock 01 - Prefab Guide and Hierarchy
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 13
+
+UI Lock 02 - Mode Select
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 14
+
+UI Lock 03 - Witness Diary
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 15
+
+UI Lock 04 - Main Menu
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 16
+
+UI Lock 05 - Collection / Deck Builder
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 17
+
+UI Lock 06 - Card Detail / Selection
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 18
+
+UI Lock 07 - Battle Board
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 19
+
+UI Lock 08 - Compact Ritual Wheel HUD Badge for top-left battle-board circle
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 20
+
+UI Lock 09 - Large Ritual Wheel Design Reference
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 21
+
+10. Universal Layered UI Production Rules
+Every UI element that contains text, state, animation, selection, targeting, or input must be implemented as a
+layered component. Concept images define the style; the app must render live labels, values, states, glows,
+and moving parts.
+Layer
+
+Required For
+
+Runtime Rule
+
+Base Art
+
+Static ornament/background.
+
+Can be PNG/WebP, 9-sliced when resizable.
+
+Frame
+
+Buttons, cards, panels, slots.
+
+Separate from label and icon.
+
+Icon
+
+Family, keyword, resource, phase
+markers.
+
+Bindable image key; do not bake into frame when state can
+change.
+
+Label
+
+All text placeholders.
+
+Render in SwiftUI/TextMesh equivalent; never rely on
+generated placeholder text in final art.
+
+Value Text
+
+Witchfire, Seal Influence, Patience,
+costs, health.
+
+Bind to GameState. Must localize/scale.
+
+Glow
+
+Hover, active, selected, locked,
+warning.
+
+Off by default; enabled by state.
+
+Hitbox
+
+Buttons, cards, deck slots, wheel
+badge.
+
+Invisible and sized for iOS 48 pt minimum where applicable.
+
+Animation Part
+
+Ritual Wheel arrow, active segment,
+particles.
+
+Separate asset or vector layer controlled by code.
+
+10.1 Compact Ritual Wheel HUD Badge Instructions
+The compact Ritual Wheel replaces the top-left player icon on the battle board. It must fit inside the existing
+circular HUD badge. It is not a flat static PNG in production.
+Asset
+
+File Name
+
+Purpose
+
+Base wheel
+
+RitualWheel_Base.png
+
+Static ornate circular wheel.
+
+Arrow needle
+
+RitualWheel_Arrow.png
+
+Separate transparent rotating pointer.
+
+Active segment
+
+RitualWheel_ActiveSegment.png
+
+Glowing lane/phase highlight.
+
+Outer glow
+
+RitualWheel_Glow.png
+
+Pulse when phase changes.
+
+Center text
+
+TXT_PHASE runtime text
+
+Rendered by app; shows active phase/lane.
+
+Order text
+
+TXT_1 to TXT_4 runtime text
+
+Rendered by app if large enough; may hide at small
+HUD size.
+
+enum RitualWheelLane: CaseIterable { case top, left, right, awakened }
+enum RitualPhase { case defense, buffDebuff, damage, special, cleanup, status, scoring }
+struct RitualWheelState {
+var activeLane: RitualWheelLane
+var activePhase: RitualPhase
+var turnIndex: Int
+var isResolving: Bool
+}
+func angle(for lane: RitualWheelLane) -> CGFloat {
+switch lane {
+case .top: return 0
+case .right: return .pi / 2
+case .awakened: return .pi
+case .left: return -.pi / 2
+}
+}
+arrowNode.run(SKAction.rotate(toAngle: angle(for: state.activeLane),
+duration: 0.35,
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 22
+
+shortestUnitArc: true))
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 23
+
+11. Data Contracts and JSON Schemas
+11.1 Card Definition JSON
+{
+"id": "DM_T1_001",
+"name": "Coven Ash",
+"family": "dark_magic",
+"tier": 1,
+"cost": 2,
+"statRoll": { "healthMin": 45, "healthMax": 80, "damageMin": 15, "damageMax": 32 },
+"keywords": ["Burn", "Vulnerable"],
+"targeting": { "mode": "lane_auto", "priority": ["guard", "marked", "mirrored", "weakest"] },
+"onReveal": [{ "type": "damage", "amount": 24, "vfx": "purple_burn" }],
+"persistent": [{ "type": "burn_tick", "amount": 8, "timing": "ritual_wheel_status" }],
+"hookEligible": true,
+"hook": {
+"canDropActive": true,
+"activeDropChance": 0.06,
+"unlockCurrency": "coven_ash",
+"unlockCost": 300,
+"awakeningRecipeTags": ["ashen_covenant"]
+}
+}
+
+11.2 Deck Save Schema
+{
+
+"deckID": "uuid",
+"name": "Dark Starter",
+"isActive": true,
+"cardInstanceIDs": ["uuid1", "uuid2"],
+"tier3AnchorID": "DM_T3_ASHEN_COVENANT",
+"familyComposition": { "dark_magic": 0.40, "elemental": 0.20, "spellbook": 0.15, "oathbound": 0.15, "salem_folk": 0.05, "church
+"ritualFamilyTier": "none|apprentice|summoner|master",
+"validatedAtBuildVersion": "0.1.0"
+}
+
+11.3 Match State Schema
+{
+"round": 3,
+"isOvertime": false,
+"witchfire": { "base": 4, "available": 1, "banked": 0 },
+"drawCountThisTurn": 1,
+"cardsPlayedThisTurn": 2,
+"patience": { "countdown": 3, "isPatient": false, "uiColor": "purple" },
+"sealInfluence": { "player": 920, "opponent": 870 },
+"ritualWheel": { "activeLane": "left", "activePhase": "damage", "isResolving": true }
+}
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 24
+
+12. Codex Implementation Guide - Step by Step
+Step
+
+Workstream
+
+Instructions
+
+1
+
+Repository bootstrap
+
+Create native iOS app target with SwiftUI shell, SpriteKit battle surface, XCTest target,
+fixtures, and lint/test scripts.
+
+2
+
+GameCore module
+
+Implement pure Swift deterministic models: CardDefinition, CardInstance, Deck,
+MatchState, TurnState, RitualWheelState, SealInfluenceState.
+
+3
+
+Resource system
+
+Implement Witchfire curve, multi-card play while affordable, draw 1/2 based on Patient,
+and carryover only after Patient.
+
+4
+
+Patience logic
+
+Track cardsPlayedThisTurn. Decrement countdown only when cardsPlayedThisTurn ==
+0 and !isPatient. Add tests for 0, 1, and 2+ card turns.
+
+5
+
+Decks
+
+Implement multiple deck saves, active deck selection, starter deck creation, validation,
+and family ritual tier detection.
+
+6
+
+Card data loader
+
+Load JSON, validate stat ranges/keywords/targeting/hook data. Fail build/test on invalid
+cards.
+
+7
+
+Targeting resolver
+
+Implement hybrid priority order using deterministic RNG for random targets.
+
+8
+
+Ritual Wheel engine
+
+Build lane order rotation and phase queue. Generate CombatActions sequentially.
+
+9
+
+Scoring engine
+
+Compute Lane Control, Surviving Board Value, Ritual Pressure, Witness Marks, and live
+Seal Influence.
+
+10
+
+UI components
+
+Implement layered prefabs: buttons, card slots, card detail, deck slots, HUD counters,
+Ritual Wheel badge.
+
+11
+
+Battle board
+
+Recreate locked board layout. Ritual Power counter displays Seal Influence. Top-left
+icon becomes Ritual Wheel badge.
+
+12
+
+Animations/VFX
+
+Implement arrow rotation, active segment glow, card play, impact numbers, lane pulse,
+and Seal Influence count-up.
+
+13
+
+Tutorial
+
+Script first-time tutorial covering all basics and scoring in most-to-least influential
+order.
+
+14
+
+AI
+
+Implement legal play generation, Witchfire budgeting, deck role heuristics, targeting
+decisions, and pass/no-card strategy.
+
+15
+
+QA
+
+Add XCTest coverage, snapshot checks, tutorial smoke test, deterministic replay, and
+physical iPhone beta validation.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 25
+
+13. Dev Ticket Roadmap - Empty Repo to iOS Beta
+Tickets must be small enough that a single ticket is not overwhelming. Every ticket must follow the GitHub +
+Swift workflow: search relevant GitHub/Swift examples before implementation, implement, test, then
+search/check again for edge cases before closing.
+Ticket
+
+Area
+
+Task
+
+Acceptance
+
+T-001
+
+Foundation
+
+Create repository structure
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-002
+
+Foundation
+
+Create Xcode project
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-003
+
+Foundation
+
+Add SwiftUI app shell
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-004
+
+Foundation
+
+Add SpriteKit battle scene
+placeholder
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-005
+
+Foundation
+
+Add XCTest target
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-006
+
+Foundation
+
+Add deterministic RNG utility
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-007
+
+Foundation
+
+Add fixture loading
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-008
+
+Foundation
+
+Add CI build script
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-009
+
+Core Rules
+
+Implement CardDefinition
+model
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-010
+
+Core Rules
+
+Implement CardInstance model
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-011
+
+Core Rules
+
+Implement Deck model
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-012
+
+Core Rules
+
+Implement MatchState model
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-013
+
+Core Rules
+
+Implement Witchfire curve
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-014
+
+Core Rules
+
+Implement multi-card play
+budget
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-015
+
+Core Rules
+
+Implement draw 1/2 cadence
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-016
+
+Core Rules
+
+Implement Patience countdown
+trigger
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 26
+
+Ticket
+
+Area
+
+Task
+
+Acceptance
+
+T-017
+
+Core Rules
+
+Implement Witchfire carryover
+after Patient
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-018
+
+Core Rules
+
+Implement overtime 5% rule
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-019
+
+Cards and
+Decks
+
+Create starter Tier 3 choice flow
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-020
+
+Cards and
+Decks
+
+Create starter deck generator
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 27
+
+Ticket
+
+Area
+
+Task
+
+Acceptance
+
+T-021
+
+Cards and
+Decks
+
+Implement multiple saved decks
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-022
+
+Cards and
+Decks
+
+Implement active deck selector
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-023
+
+Cards and
+Decks
+
+Implement deck validator
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-024
+
+Cards and
+Decks
+
+Implement hook economy data
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-025
+
+Cards and
+Decks
+
+Implement hook unlock
+currency
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-026
+
+Cards and
+Decks
+
+Implement family ritual tier
+detector
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-027
+
+Cards and
+Decks
+
+Implement family damage
+bonuses
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-028
+
+Cards and
+Decks
+
+Implement awakened draw
+bonus rules
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-029
+
+Combat
+
+Implement lane/slot board
+model
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-030
+
+Combat
+
+Implement targeting resolver
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-031
+
+Combat
+
+Implement Guard/Ward/Barrier
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-032
+
+Combat
+
+Implement buff/debuff/status
+models
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-033
+
+Combat
+
+Implement Ritual Wheel lane
+order
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-034
+
+Combat
+
+Implement Ritual Wheel phases
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-035
+
+Combat
+
+Implement CombatAction queue
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-036
+
+Combat
+
+Implement death cleanup
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-037
+
+Combat
+
+Implement Seal Influence
+scoring
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-038
+
+Combat
+
+Implement Witness Marks
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 28
+
+Ticket
+
+Area
+
+Task
+
+Acceptance
+
+T-039
+
+UI
+
+Implement universal button
+prefab
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-040
+
+UI
+
+Implement card slot prefab
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 29
+
+Ticket
+
+Area
+
+Task
+
+Acceptance
+
+T-041
+
+UI
+
+Implement card detail prefab
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-042
+
+UI
+
+Implement HUD counters
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-043
+
+UI
+
+Implement compact Ritual
+Wheel badge layers
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-044
+
+UI
+
+Implement arrow rotation
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-045
+
+UI
+
+Implement active segment glow
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-046
+
+UI
+
+Implement dynamic text
+rendering
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-047
+
+UI
+
+Implement deck builder screen
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-048
+
+UI
+
+Implement battle board layout
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-049
+
+Tutorial and AI
+
+Build tutorial deck fixture
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-050
+
+Tutorial and AI
+
+Implement tutorial step
+manager
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-051
+
+Tutorial and AI
+
+Teach Witchfire and multi-card
+play
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-052
+
+Tutorial and AI
+
+Teach Patience true no-card
+trigger
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-053
+
+Tutorial and AI
+
+Teach scoring order
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-054
+
+Tutorial and AI
+
+Teach Ritual Wheel combat
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-055
+
+Tutorial and AI
+
+Implement AI legal move list
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-056
+
+Tutorial and AI
+
+Implement AI scoring heuristic
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-057
+
+Tutorial and AI
+
+Implement AI pass strategy
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-058
+
+Tutorial and AI
+
+Implement deterministic replay
+logs
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 30
+
+Ticket
+
+Area
+
+Task
+
+Acceptance
+
+T-059
+
+Beta
+
+Add save migration
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-060
+
+Beta
+
+Add local profile
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 31
+
+Ticket
+
+Area
+
+Task
+
+Acceptance
+
+T-061
+
+Beta
+
+Add debug menu
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-062
+
+Beta
+
+Add TestFlight build settings
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-063
+
+Beta
+
+Run physical iPhone smoke test
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-064
+
+Beta
+
+Run tutorial reset test
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-065
+
+Beta
+
+Run deck save/load test
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-066
+
+Beta
+
+Run combat replay test
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-067
+
+Beta
+
+Run accessibility pass
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+T-068
+
+Beta
+
+Final handoff review
+
+Done when tests pass, screenshot/replay evidence is
+attached, and no superseded play-cap or old Patience rule
+remains.
+
+14. AGENTS.md - Project Agent System
+# AGENTS.md - Salem Arcana
+## Prime Directive
+Build Salem Arcana as a native iOS card battler using Swift, SwiftUI, SpriteKit, and deterministic GameCore rules.
+The locked UI images define visual direction. The V9 Master Handoff defines gameplay, data, tutorial, QA, and delivery rules.
+##
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+
+Required Workflow for Every Ticket
+Search GitHub for relevant Swift/SwiftUI/SpriteKit patterns before implementation.
+Read the relevant section of the V9 Master Handoff.
+Implement the smallest possible vertical slice.
+Add or update XCTest coverage and deterministic fixtures.
+Run the app/snapshot/replay relevant to the ticket.
+Search/check again for edge cases or common Swift pitfalls.
+Record evidence in the PR.
+
+## Canon
+- Do not
+- Do not
+- Do not
+- Do not
+- Do not
+- Do not
+
+Hard Stops
+implement any fixed play-count cap; plays are limited by Witchfire and legal board state.
+decrement Patience after any turn where one or more cards were played.
+carry over Witchfire before Patient.
+treat Ritual Power as a separate combat resource; it displays Seal Influence.
+bake dynamic UI text into final flat images.
+fire all end-of-turn card effects at once.
+
+## Agents
+- Game Director Agent: protects canon and priority decisions.
+- Rules Engineer Agent: owns GameCore, Witchfire, Patience, scoring, combat queue.
+- UI Engineer Agent: owns layered UI components and locked screen implementation.
+- Card Data Agent: owns JSON schemas, card definitions, stats, hooks, keywords.
+- Tutorial Agent: owns first-time flow and mechanic explanation order.
+- AI Agent: owns legal play search, heuristic scoring, and deterministic bot behavior.
+- QA Agent: owns tests, replay logs, device smoke checks, and final beta gates.
+- Lore/Narrative Agent: owns Witness, Jailer, factions, seasons, and tone consistency.
+
+## Final QC Checklist
+Every PR must state whether it touches: Witchfire, draw, Patience, Ritual Wheel, Seal Influence, hooks, family rituals, UI layeri
+If yes, the PR must include a test or screenshot/replay proving the rule still matches V9.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 32
+
+15. QA and Final Engineer Acceptance
+Test Area
+
+Required Checks
+
+Old rule removal
+
+Search code/docs for any fixed play-count cap language. No active rule may limit turn play
+count except Witchfire, card legality, hand size, and board space.
+
+Witchfire
+
+Unit test R1=2, R2=3, R3=4, R4=5, R5=6, R6=7, OT=7.
+
+Multi-card play
+
+Player can play two or more affordable cards in one turn. Witchfire decrements correctly.
+
+Draw cadence
+
+Pre-Patient turn draws 1. Patient turn draws 2.
+
+Patience trigger
+
+0-card turn decrements. 1-card turn does not. 2-card turn does not. Countdown turns
+yellow at 0.
+
+Carryover
+
+Unused Witchfire is lost pre-Patient and banks post-Patient.
+
+Seal Influence
+
+Ritual Power counter displays Seal Influence and updates after Ritual Wheel phases.
+
+Ritual Wheel
+
+Effects resolve lane by lane and phase by phase; no full-board simultaneous dump.
+
+Decks
+
+Multiple decks can be saved and one active deck loaded.
+
+Hooks
+
+Starter deck does not grant active hooks; hooks drop/unlock only.
+
+Tutorial
+
+Required before first match and teaches scoring in order: Lane Control, Surviving Board
+Value, Ritual Pressure, Witness Marks.
+
+Device beta
+
+Build runs on physical iPhone, safe areas correct, touch targets usable, no clipped text.
+
+16. Final Text Search Guardrails
+Before handing to engineering, run text/code searches for superseded concepts. Any active result must be
+removed or rewritten.
+Reject active occurrences of:
+- any fixed turn play-count cap
+- any rule saying turn play is limited by count instead of Witchfire
+- any rule saying Patience advances after cards were played
+- "Patience decreases at end turn" without the zero-card condition
+- "Witchfire carries over" without the Patient condition
+Required active occurrences:
+- "players may play as many cards as their Witchfire allows"
+- "Patience countdown decreases only when zero cards are played"
+- "draw 1 before Patient; draw 2 after Patient"
+- "Ritual Power counter displays Seal Influence"
+- "Ritual Wheel resolves combat sequentially"
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 33
+
+17. Lore Bible and Season Roadmap Appendix
+This appendix preserves the Salem Arcana lore source so engineers, writers, card designers, and UI/UX teams
+have narrative context. Gameplay rules in Sections 1-16 supersede any older mechanical assumptions.
+
+WITCHFEST DESTINY: SALEM ARCANA
+Complete Game Lore — Seasons 1 through 40
+
+THE WORLD BIBLE
+The World
+1692 Salem, Massachusetts. The veil between worlds is thin here—thinner than anywhere else in the colonies. Magic is real. It
+has always been real. But it is persecuted, driven underground by church and crown alike. The witch trials that gripped Salem
+were not mass hysteria. They were a cover for something deeper. Something the Puritan authorities discovered and could not
+explain, so they burned everyone who knew about it.
+Beneath the American continent sleeps an entity of immense, geological scale. It is not evil. It is not good. It simply IS. It has
+slept for millennia, and the seals that keep it dormant are weakening. The first seal lies beneath Salem. When it breaks, the
+Witch Revolutionary War begins.
+The war will cross the entire continent over forty seasons. Every river crossed, every mountain climbed, every seal broken
+brings the entity closer to waking. And when it wakes, the world will have to decide: is this a monster to be destroyed, or a
+being to be understood?
+
+The Spark
+The inciting event that ignites the war is called simply "The Spark." On a winter night in 1692, in a hidden chamber beneath
+the Salem meeting house, a coven of Dark Magic practitioners attempts a ritual to strengthen the seal—not break it. They
+believe the seal is failing and that they can reinforce it with a blood pact.
+They are wrong.
+The ritual backfires catastrophically. Instead of strengthening the seal, it cracks it. A surge of raw magical energy erupts from
+the earth beneath Salem. Every practitioner in the chamber is either killed or transformed. The crack in the seal releases
+something: not the entity itself, but a pulse of its dreaming consciousness. Every magic user in Salem feels it. Every card in
+existence flickers. The awakened powers—the four Tier 3 signature cards—manifest for the first time.
+A young cooper's apprentice, working late in a shop near the meeting house, sees the light erupt from the ground. This
+apprentice—later known only as The Witness—writes the first entry in what will become a journal spanning ten years and forty
+seasons of war:
+"I saw the earth open tonight. Not a crack in the ground, but a crack in what I thought was real. The light that came out was
+not fire. It was older than fire. It looked at me. I think it looked at everyone. And I think it was asking a question I don't know
+how to answer."
+The Puritan authorities blame the coven. Arrests begin. But the magic is already spreading. The crack in the seal awakened
+dormant powers in dozens of people across Salem—people who didn't know they had magic, people who had hidden it, people
+who had inherited it from ancestors burned at the stake. Within days, the factions form. Within weeks, the first battles are
+fought. Within a season, Salem is burning.
+And watching from the shadows, a figure in a dark cloak observes everything. A silver clasp at their throat catches the
+firelight. The Jailer has been waiting for this moment for three hundred years.
+
+The Factions
+Dark Magic / Warlock The oldest coven in the colonies, led by Mother
+Corvus. They practice curses, drain, sacrifice, and corruption. They
+were performing the ritual that triggered the Spark—but were they
+trying to save the seal, or were they manipulated into breaking it?
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 34
+
+Mother Corvus knows more than she reveals. Her secret agenda
+involves forcing a confrontation between the entity and the surface
+world. She believes magic has hidden in shame for too long.
+Elemental Magic Nature-bound practitioners who draw power from
+fire, frost, storm, and root. They are split between those who want to
+preserve the natural order and those who believe the entity's
+awakening is a natural cycle that should not be interfered with. Their
+leader, a woman known only as the Storm-Caller, speaks with the voice
+of approaching weather.
+Spellbook Magic Archivists and name-keepers. They hold the secret
+histories—the true names of powers older than Salem, older than the
+colonies, older than the Puritans' god. Their leader is the Librarian of
+Candle Names, a figure so old that their original name has been
+forgotten. They know what the entity is. They have always known. They
+will not say.
+Oathbound Magic A knightly order bound by magical vows. Their
+oaths are centuries old, sworn to protect the innocent from
+supernatural harm. But the oaths are breaking. Some Oathbound seek
+freedom from their bindings. Others want to enforce them more
+strictly than ever. Their leader, the Silver Vow-Keeper, has not spoken
+in seven years—their voice bound by an oath they cannot break
+without dying.
+Salem Folk Ordinary people. Coopers, blacksmiths, farmers,
+tavern-keepers. They have no magic. What they have is tools, rage, and
+the determination to survive in a world that has suddenly become
+incomprehensible. They are led by no one and everyone—their
+strength is in numbers and desperation. The Witness comes from their
+ranks.
+Church Figures Not all are villains. Some genuinely protect the
+innocent from dark forces. Others hunt magic-users with zealot's fire.
+An internal schism is brewing between the merciful and the merciless.
+The leader of the orthodox faction, Deacon Stone, believes all magic is
+sin and must be purged. The leader of the reformist faction, Sister
+Mercy, believes magic can be redeemed and used for good.
+The Awakened Ones
+The four Tier 3 signature cards are not just powerful game pieces. They are living lore—entities with their own histories and
+agendas.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 35
+
+Ashen Covenant (Dark Magic) A pact forged in the first witch-burning.
+Not a person—a living agreement between the condemned and the fire
+itself. It exists as a charred document that can never be fully
+consumed. The names of every witch ever burned are written on it in
+violet flame. When it awakens into **Black Ash**, it becomes a
+sentient storm of charred covenant-scraps that remembers every
+name and seeks vengeance for each one.
+Stormglass Writ (Elemental Magic) A prophecy captured in
+lightning-struck glass. When lightning hit the Salem meeting house
+steeple, the sand beneath fused into a pane of glass containing a
+frozen bolt—and within the bolt, words. The prophecy shows many
+futures. All of them are at war. When it awakens into **Sky Stands**, it
+becomes a living storm cell that hovers above the battlefield, casting
+lightning-judgment on all below.
+Book of Candle Names (Spellbook Magic) A tome that records the true
+names of every being—living, dead, and some that are neither.
+Reading a name aloud grants power over that being. The book is
+bound in wax, not leather, and its pages are vellum made from pressed
+candle smoke. No one knows who writes the names. New ones appear
+while the book is closed. When it awakens into **Names Burn**, every
+name written in it becomes a floating sigil of candle-flame orbiting
+the battlefield.
+Silver Oath of Dawn (Oathbound Magic) The first vow ever sworn. An
+empty silver gauntlet that stands by its own will. It is the embodiment
+of every promise ever kept and every oath ever honored. Breaking it
+would unmake the concept of promises. When it awakens into **Table
+Swears**, the vow becomes a binding across the entire
+battlefield—every promise kept strengthens allies, and every oath
+broken weakens enemies.
+The Big Mystery
+Why does magic exist in this world? What is the veil? Who or what benefits from the war continuing indefinitely?
+The answer sleeps beneath America.
+The entity is not a monster. It is not a god. It is a being of such vast scale and slow consciousness that its dreams take
+centuries to complete. The seals were not a cage built by humans to imprison it. The seals were a bargain—an agreement
+made thousands of years ago between the entity and the first peoples of this land. The entity chose to sleep. The seals were the
+terms of that sleep.
+But something changed. Someone began breaking the seals. And that someone—the Jailer—is not the villain of this story. The
+Jailer was the first explorer to discover the entity, centuries ago. Their life was bound to the seals in exchange for forbidden
+knowledge. For three hundred years, they maintained the seals. But now they are breaking them, one by one, working
+westward.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 36
+
+Why? The answer comes slowly across forty seasons. The Jailer has learned something about the entity's sleep—something
+that changes everything. The entity is not supposed to sleep forever. It is supposed to wake. And if it doesn't wake naturally, it
+will die. And if it dies, something far worse will take its place beneath the continent.
+The war is not about winning. It is about choosing what kind of world the entity wakes into.
+
+The Witness
+An ordinary Salem Folk who saw the Spark happen. A cooper's apprentice, age 22 when the story begins. They were working
+late, repairing a barrel, when the earth cracked open behind the meeting house and light poured out.
+The Witness is not a fighter. They are not a leader. They are an observer—someone who writes everything down in a
+leather-bound journal that never leaves their side. Across forty seasons, their journal entries narrate every cutscene, every
+major battle, every revelation.
+And across those seasons, the Witness changes.
+Season 1: Young, terrified, but unable to look away. Their journal is a survival mechanism—"If I write it down, I can believe it
+happened."
+Season 3: The Witness touches the waters of Lake Erie and has a vision of the full entity beneath the continent. They begin to
+show magical sensitivity.
+Season 5: Now in their late 20s, the Witness has seen too much to be innocent. Their journal entries grow sharper, more
+analytical. They begin to piece together the Jailer's true motives.
+Season 6: The Witness dies. Killed during a battle in the Delta. And then—three days later—they return. Changed. Their skin is
+slightly translucent at the temples, revealing a faint blue-white glow beneath. They are now something between human and
+entity-touched. The entity speaks through them for the first time, in a voice that sounds like continents shifting: "Remember."
+Season 9: The Witness, now a middle-aged veteran of a decade-long war, has become a faction leader in their own right. They
+lead not with power but with knowledge—they have seen more of the entity than anyone alive.
+Season 10: The Witness names the entity. Naming gives it form, and form gives it limits. This is the final choice of the war—not
+a battle, but a naming. And the Witness, who started as a terrified apprentice with a journal, is the only one who can do it.
+
+SEASON 1: SALEM ARCANA
+Detailed Narrative
+ACT 1: THE SPARK IGNITES
+Opening Cutscene: The Spark Event Duration: 90 seconds. The Witness narrates throughout.
+It is winter in Salem, 1692. Snow on the rooftops. Lanterns swinging in the wind. The meeting house stands dark and
+silent—but beneath it, in a chamber carved from the earth, a coven works in secret. Mother Corvus leads the ritual, her silver
+athame raised. Around her, Dark Magic practitioners chant in a language older than English, older than Latin. They are trying
+to strengthen the seal. They believe they are saving the world.
+The ritual circle is drawn in ash and blood. Candles burn at seven points. The air is thick with incense and anticipation.
+The Witness, a young cooper's apprentice, is working late three streets away. They hear nothing. See nothing. But they feel
+something—a pressure change, like before a storm. They look up from their work.
+In the chamber, the ritual reaches its climax. Mother Corvus speaks the final word.
+And the seal cracks.
+Not a physical crack. A crack in reality itself. Violet light erupts from the center of the ritual circle. The candles extinguish
+simultaneously. The ash and blood ignite. The practitioners are thrown backward. Three of them are killed instantly. Two are
+transformed—their bodies becoming conduits for the escaping energy, their eyes burning with violet fire.
+Mother Corvus alone remains standing. She has seen this coming. This was not the ritual's intended outcome—but it was one
+she had prepared for. As the light pours out of the earth, she smiles.
+Above ground, the Witness sees the light. It erupts from behind the meeting house like a second sunrise—but violet, not gold.
+The light pulses once, twice, three times. And on the third pulse, every magic user in Salem feels it. Cards flicker in collections
+across the town. The four Tier 3 signatures manifest in the hands of their destined bearers. The war has begun.
+The Witness opens their journal. Charcoal stick trembling, they write the first words: "I saw the earth open tonight..."
+Faction Introduction Montage Six short vignettes, 15-20 seconds each.
+Dark Magic: Mother Corvus stands in the wreckage of the ritual chamber. Her coven lies dead or transformed around her. She
+reaches into the violet light still pulsing from the crack and pulls out a charred document—the Ashen Covenant. It burns in her
+hand but does not consume. "The pact is renewed," she whispers. "The first name was hers. The last name will be mine."
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 37
+
+Elemental: The Storm-Caller stands alone on a hill outside Salem. As the violet pulse washes over her, she raises her arms to
+the sky. The clouds above her begin to rotate. Lightning strikes the ground at her feet, and where it strikes, the Stormglass
+Writ forms—a pane of glass with a bolt frozen inside. She touches it. Her eyes go white. "I have seen the futures," she says to
+no one. "All of them. We must choose carefully."
+Spellbook: In the hidden library beneath a candle-maker's shop, the Librarian of Candle Names feels the pulse. The Book of
+Candle Names, which has been silent for a century, opens itself. A new name writes itself on a blank page. The Librarian reads
+it aloud—and somewhere in Salem, the person whose name was written feels a shiver. "The names are waking up," the
+Librarian murmurs. "And they are hungry to be spoken."
+Oathbound: The Silver Vow-Keeper kneels in a chapel. They have not spoken in seven years—an oath of silence binds them.
+When the pulse hits, the Silver Oath of Dawn appears before them: an empty gauntlet, standing upright by its own will. The
+Vow-Keeper reaches out and touches it. For the first time in seven years, they speak: "The oldest oath is breaking. I felt it."
+Around them, other Oathbound gasp. The Vow-Keeper's voice is the sound of something ending.
+Salem Folk: A tavern. Ordinary people drinking, laughing, arguing. The pulse hits. The lanterns flicker. The laughter stops.
+Someone screams. Someone else grabs a knife—not because they know what's happening, but because they know something is
+happening, and in Salem, when something happens, it usually ends with someone burning. The Witness is among them, journal
+clutched to their chest. They are the only one writing. The only one watching.
+Church Figures: Deacon Stone stands in the pulpit of the Salem meeting house. When the pulse hits, he grips the lectern until
+his knuckles go white. His eyes narrow. "Witchcraft," he hisses. "I knew it. I have always known it." In the back of the church,
+Sister Mercy crosses herself. She feels the pulse differently—as pain, as grief. She knows that innocent people are about to
+die.
+The Player's Choice
+The player—a new practitioner whose powers awakened with the Spark—is approached by representatives of all four magical
+factions. Each offers a Tier 3 signature card and an invitation to join their cause. The player must choose one. This is not just a
+strategic choice. It is a narrative binding. The card chooses the player as much as the player chooses the card.
+This moment is presented as a cutscene where the four signature cards appear before the player: the Ashen Covenant burning
+but not consuming, the Stormglass Writ crackling with frozen lightning, the Book of Candle Names writing a new name as they
+watch, the Silver Oath of Dawn standing silent and waiting.
+Early Conflict
+The Puritan authorities begin rounding up suspected witches. Not the real magic users—they've gone to ground. The ones they
+arrest are ordinary people: the healer who knows herbs, the old woman who talks to her cats, the midwife who has delivered
+too many healthy babies to be natural.
+Salem Folk riot. They know the accused are innocent. They storm the meeting house. Deacon Stone orders the militia to fire on
+the crowd. The first blood of the war is not magical. It is ordinary people killed by ordinary bullets.
+The magical factions emerge from hiding. They do not do so to save the Salem Folk—at least, not at first. They emerge because
+the crack in the seal is growing, and if it is not controlled, it will consume Salem entirely.
+Sister Mercy breaks from Deacon Stone's authority. She leads a group of reformist Church Figures to the crack, attempting to
+heal it with prayer and sacred rituals. It doesn't work—but it slows the crack's growth. For the first time, Church Figures and
+magic-users fight on the same side.
+Act 1 Twist
+The Spark was not an accident. Someone triggered it deliberately.
+A shadowy figure is glimpsed leaving the scene of the ritual chamber in the chaos after the pulse. Tall, cloaked, hooded. No
+face is visible. But a silver clasp at the throat catches the firelight. The Jailer has been here all along.
+The Witness sees the figure and writes: "There was someone watching. Not fleeing—watching. Like they had been waiting for
+this to happen. Like they had made it happen."
+
+ACT 2: SECRETS AND ALLIANCES
+The Awakening System Discovered
+As battles intensify, the player learns of the awakening system. Their Tier 3 card begins to "speak" to them—not in words, but
+in impulses, in dreams, in the way the card art seems to shift when no one is looking. The card wants to awaken. It needs three
+specific passive-hook cards, positioned in the three lane groups. The player begins hunting for these cards.
+Temporary Alliances
+The six factions form and break alliances with dizzying speed. Dark Magic and Elemental Magic briefly ally against the Church
+Figures—but the alliance shatters when Mother Corvus tries to sacrifice an Elemental practitioner to fuel a spell. The
+Oathbound pledge to protect the Salem Folk—but the Salem Folk don't trust anyone with magic, even those sworn to protect
+them. The reformist Church Figures under Sister Mercy find common ground with the Spellbook archivists, who share
+knowledge of the seals.
+The First Awakening
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 38
+
+In a pivotal battle, a rival achieves the first awakening. It is not the player. It is someone else—an enemy, an ally, it doesn't
+matter. What matters is that the world changes when it happens.
+The rival's Tier 3 card rises from its slot. The three passive-hook cards pulse. The card transforms—the art style shifts from
+static to luminous, the painted elements become real, the awakened being steps partially out of the frame. The infusion trails
+ignite. Every player on both sides feels it.
+The Witness writes: "I have seen lightning strike a tree. I have seen a house catch fire in a storm. Neither compares. The air
+tasted like copper and old parchment. The hair on my arms stood up. Every candle in the room guttered at once. And for one
+moment—one heartbeat—I felt something beneath the floorboards. Something vast. Something that had been sleeping. The
+awakening had not created power. It had borrowed it. From something that noticed us for the first time."
+The player now knows it can be done. They chase their own awakening recipe.
+The Betrayal
+A faction leader is revealed to be working with the shadowy figure. The traitor is not Mother Corvus—she is too obvious a
+suspect. The traitor is one of the Oathbound's lieutenants, the Keeper of the Second Vow. They have been feeding information
+to the Jailer in exchange for promises that their broken oaths can be forgiven.
+When exposed, the Keeper does not deny it. "The oaths are chains," they say. "The Jailer offered me a key. You would have
+taken it too."
+The Jailer appears briefly during the confrontation—a silhouette in a doorway, the silver clasp glinting. They speak for the first
+time. Their voice is old, tired, and carries an accent that no one can place. "The seals are breaking," they say. "Not because I
+want them to. Because they must. You do not understand yet. But you will."
+Then they are gone.
+The Witness writes: "Trust was our first casualty. The Keeper of the Second Vow—someone we all respected—has been
+speaking to the shadow. To the one who watches. They said the seals MUST break. They said we would understand. I am
+afraid of understanding."
+
+ACT 3: THE FIRST BATTLE OF SALEM
+The Convergence
+All six factions converge on Salem for a climactic battle. The crack in the seal has grown to a visible fissure in the earth,
+running from the meeting house to the harbor. Violet light pulses from it like a heartbeat. The entity beneath is stirring.
+The battle is chaos. No clear sides. Every faction fights every other faction, with temporary alliances forming and breaking in
+the space of single turns. The player fights through the chaos, pursuing their awakening.
+The Player's Awakening
+In the heat of the battle, the player achieves their awakening. The three passive-hook cards lock into place. The Tier 3 anchor
+rises. The transformation begins.
+This is the player's moment. The cutscene mirrors the earlier first awakening but from the player's perspective. Their card
+awakens. The infusion trails ignite. The battle shifts.
+The Jailer's Partial Reveal
+In the aftermath of the player's awakening, the Jailer appears openly for the first time. They walk through the battlefield
+untouched—not because they are invulnerable, but because everyone is too exhausted, too shocked, to stop them.
+The Jailer approaches the crack in the seal. They kneel. They place a hand on the fissure. And for a moment, the violet light
+dims. The heartbeat slows.
+"You are not ready," the Jailer says to the gathered factions. "But you will need to be. This is only the first seal. The first town.
+There are seals beneath every river, every mountain, every territory between here and the other coast. By the time you reach
+the last one, you will understand what I am doing. Or you will be dead."
+They stand. The hood has fallen back slightly, revealing part of a weathered face—old, but not ancient. Human, but not
+entirely. The silver clasp at their throat catches the firelight.
+"My name was taken from me long ago," they say. "But you may call me the Jailer. I have been maintaining these seals for
+three hundred years. Now I am breaking them. Ask yourselves why a jailer would break the locks they spent centuries
+protecting."
+They turn and walk into the smoke. No one follows.
+Season 1 Closing
+Salem is devastated but not destroyed. The crack in the seal has stabilized—not healed, but no longer growing. The factions
+have seen what they are fighting over. They have seen an awakening. They have seen the Jailer. They know the war is bigger
+than Salem.
+The Witness writes the final journal entry of Season 1, their charcoal stick worn to a nub:
+"This was only the first town. The fire will cross every river, every mountain, every territory between here and the other coast.
+We are not fighting for Salem anymore. We are fighting for what America becomes. I am twenty-two years old. I do not know if
+I will live to see the end of this. But I will write everything down. Someone should remember."
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 39
+
+Stinger
+A map of the American colonies. A burning line traces westward from Salem, across Massachusetts, toward the Hudson River.
+The line is violet fire.
+Text appears: "Season 2: The Hudson Veil"
+In the shadows at the edge of the map, a dark figure watches. A silver clasp glints.
+
+SEASON 2: THE HUDSON VEIL
+Detailed Narrative
+ACT 1: THE RIVER BECKONS
+Opening Cutscene: The Exodus The Witness narrates.
+Fall 1693. The factions flee Salem. The town is uninhabitable—the crack in the seal pulses with violet light, and the entity's
+dreams are seeping through. People who sleep too close to the fissure wake up speaking languages that don't exist, drawing
+maps of places they've never seen, writing names that aren't theirs.
+The exodus moves west, toward the Hudson River—the first major barrier between Salem and the rest of the continent. The
+column of refugees is a strange sight: Dark Magic practitioners in black cloaks walking alongside Salem Folk farmers with
+pitchforks on their shoulders. Elemental adepts who make the wind favorable for travel. Oathbound knights guarding the
+flanks. Church Figures split into two groups—Deacon Stone's zealots, who want to turn back and burn Salem to ash, and Sister
+Mercy's reformers, who walk among the refugees offering what comfort they can.
+The Witness walks among them, journal in hand, writing constantly. They are now 23. The scar on their left eyebrow has been
+joined by a new one on their jaw—a cut from flying glass during the Battle of Salem.
+New Geography
+The Hudson River Valley is contested territory. French trappers, British colonists, and Native nations—the Mohican, the
+Munsee, the Haudenosaunee—all have claims here. The factions cannot simply march through. They must negotiate passage,
+and not everyone is willing.
+More importantly: the river itself is magical. It is a "veil"—one of the seals that keeps the entity dormant. Crossing it will have
+consequences.
+The New Tier 3 Signatures Manifest
+Two new Tier 3 cards appear in the world, drawn to the energy of the Hudson Veil.
+Skybound Totem rises from an ancient burial mound on the river's eastern bank. It is a totem carved from lightning-struck
+cedar, older than the colonies, older than the tribes that currently live here. It was placed here by a civilization that predates
+history, one of the original peoples who made the bargain with the entity. When the factions approach, the totem awakens and
+calls a storm. The Storm-Caller of the Elemental faction must prove herself worthy to claim it. She does—by standing in the
+center of the storm and letting lightning strike her three times. On the third strike, the totem recognizes her and the storm
+ceases.
+Mirror-Sigil coalesces from the displaced magic of European refugees—not a Native artifact, but something new. The
+accumulated magical residue of every European practitioner who crossed the Atlantic, concentrated by the Hudson Veil's
+energy, condenses into a single reflective sigil. It belongs to no faction. It appears to whoever needs it most. It appears to a
+young Spellbook apprentice who lost their master in the Battle of Salem and has been carrying the master's unfinished
+grimoire ever since. The Mirror-Sigil bonds with the grimoire, and the apprentice becomes something new: a bearer of a Tier 3
+card, with all the power and danger that entails.
+The Jailer Watches
+The Jailer is present throughout Act 1, always at a distance. They are seen on hilltops, at the edges of forests, standing on the
+far bank of streams the factions are about to cross. They never interfere. They only watch.
+The Witness notices that the Jailer seems to be waiting for something specific. "They are not following us," the Witness writes.
+"They are ahead of us. They reached the Hudson before we did. They are waiting for us to catch up."
+
+ACT 2: THE VEIL THINS
+Crossing Rituals
+Each faction pursues a different method of crossing the Hudson. The Dark Magic coven attempts to force passage by draining
+the river's magical energy—a ritual that would weaken the veil but allow them to cross safely. The Elemental practitioners
+seek to appease the river's spirit, offering gifts of fire and frost. The Spellbook archivists research ancient crossing rituals in
+texts that predate European contact. The Oathbound simply build boats and trust to their vows. The Salem Folk follow
+whoever seems most likely to get them across alive. The Church Figures are split: Deacon Stone wants to dam the river and
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 40
+
+march across, Sister Mercy wants to bless it.
+None of these methods work cleanly. The river resists. It is a seal, and seals do not want to be crossed.
+Tensions with Native Practitioners
+The indigenous peoples of the Hudson Valley are not passive observers. They have known about the seal for thousands of
+years. They know what crossing it will mean. Some are hostile—they do not want the war brought to their lands. Some are
+willing to negotiate. Some offer guidance, for a price.
+A Mohican elder, known only as the River-Knower, agrees to speak with the faction leaders. She is ancient—ninety years old,
+blind, carried to the meeting on a litter. But her sight is not in her eyes. She "sees" the magical currents of the river the way
+others see sunlight.
+"You are about to do something that cannot be undone," she tells the assembled leaders. "The Hudson Veil is one of seven
+major seals stretching from the salt water to the sweet water. Each seal you cross weakens the thing beneath. My people made
+a bargain with that thing when your ancestors were still building boats to cross the ocean. We agreed to let it sleep. We agreed
+to guard the seals. That bargain kept this land stable for ten thousand years. You have undone a thousand years of stability in
+a single season."
+Mother Corvus asks what will happen if all seven seals break.
+The River-Knower is silent for a long moment. Then: "It will wake. And it will remember who broke the seals and who tried to
+protect them. I hope, for your sake, that you are on the right side of that accounting."
+Midpoint Revelation
+The Hudson Veil is not just a seal. It is one of several. Seven major seals stretch across the continent, from the Atlantic to the
+Pacific. Each one is tied to a major geographical feature: river, lake, mountain range, desert, forest, coastline. Breaking the
+seals weakens the entity's sleep. Breaking all of them will wake it.
+The Jailer appears to the player during a quiet moment. It is the first time they speak directly, one-on-one.
+"You are wondering why I am doing this," the Jailer says. "You have heard the River-Knower's warning. You think I am a
+villain."
+The player can respond—accuse, question, or stay silent.
+"The seals were a bargain," the Jailer continues, "but bargains have terms. The entity agreed to sleep for ten thousand years.
+That time is almost up. If it does not wake naturally, it will die. And if it dies, the space it occupies beneath this continent—the
+void where it dreams—will not stay empty. Something else will fill it. Something that never made any bargains. Something that
+does not sleep."
+They lean closer. The silver clasp at their throat catches the moonlight.
+"I am not breaking the seals to destroy the world. I am breaking them to give the world a chance. The entity must wake on its
+own terms, not be forced awake by its death. And for that, it needs the seals broken in the right order, at the right time, by the
+right hands. I have been arranging those hands for three hundred years. Including yours."
+They step back into shadow.
+"You will hate me before this is over. That is acceptable. What matters is that you reach the final seal before I do. Because
+when you get there, you will have to make a choice. And I want to make sure you are prepared to make it."
+
+ACT 3: THE CROSSING
+The Battle at the Hudson
+The crossing does not go peacefully. Deacon Stone, impatient with negotiation, launches an assault on the river's magical
+defenses, attempting to force passage. His attack triggers a response from the seal itself—the river rises, animated by ancient
+protective magic, and attacks everyone on both banks.
+The factions are forced to fight the river itself while simultaneously fighting each other. It is chaos. Boats capsize. People
+drown. Magic crackles across the water in wild, uncontrolled bursts.
+A Faction Leader Dies
+Deacon Stone, in a moment of zealous fury, attempts to smite the river with a holy relic—a piece of the True Cross, or so he
+believes. The relic shatters against the seal's defenses. The backlash kills him instantly.
+His death sends shockwaves through the Church Figures. Sister Mercy, who has opposed him for two seasons, kneels beside
+his body. She closes his eyes. She says a prayer. And then she stands up and takes command of the faction.
+"We have been fighting the wrong war," she announces. "Not against magic. Not against the river. Against our own fear.
+Deacon Stone was a good man who let fear make him cruel. I will not make that mistake."
+The Fragment Escapes
+The combined magical energy of the battle—the factions' spells, Deacon Stone's shattered relic, the river's own
+defenses—creates a catastrophic surge. The Hudson Veil cracks. Not breaks entirely—but cracks.
+From the crack, a fragment of the entity's dreaming consciousness escapes. It is not the entity itself. It is a splinter—a piece of
+a dream given form. It looks like a mass of roiling shadow with occasional suggestions of features: an eye that forms and
+dissolves, a mouth that opens and closes, hands that reach out and pull back.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 41
+
+The fragment screams—a sound that is heard not with ears but with minds—and flies westward, following the line of the seals
+toward the Great Lakes.
+The Jailer watches it go. For the first time, their expression is not calm. They look frustrated. Even afraid.
+"That was not supposed to happen," they mutter. "Not yet. Not here."
+The Jailer's True Goal
+In the aftermath, the Jailer speaks openly to the assembled factions for the first time. They stand on the western bank of the
+Hudson, the river now calm behind them, the fragment's distant scream echoing in everyone's minds.
+"You have seen what escapes when a seal is broken carelessly," they say. "Imagine that, but a thousand times larger. Imagine
+the entity's full consciousness, fragmented, scattered across the continent, each piece mad with the pain of a death that should
+not have happened. That is what will occur if the entity dies in its sleep. That is what I am trying to prevent."
+They point westward.
+"There are six more major seals between here and the far ocean. The fragment that escaped tonight will reach the next seal
+before you do. It will try to break it. You must reach each seal before the fragment does—or before someone else breaks it
+recklessly. You must break the seals carefully, in the right order, with the right rituals. And at the final seal, you must be
+prepared to make a choice that I cannot make for you."
+Mother Corvus asks what choice.
+"The entity will wake. That is inevitable now—the seals are too damaged, the process too far along. When it wakes, it will be
+disoriented. Frightened. A being of that scale, afraid, could destroy the continent by accident. Or it could be calmed. Named.
+Given form instead of formlessness. Someone will have to name it. And that someone must understand what it is—not a
+monster, not a god, but a living continent, a creature so old it remembers when the land was underwater. Are any of you
+prepared to name such a thing?"
+No one answers.
+"I thought not," the Jailer says. "Then you have work to do."
+Season 2 Closing
+The factions stand on the western bank of the Hudson. They have crossed the first major seal. They have seen a fragment of
+the entity escape. They have lost a faction leader. They have heard the Jailer's explanation—and none of them fully trusts it.
+The Witness writes:
+"The river is behind us. Whatever came out of it is ahead of us. The Jailer says they are trying to save the world. I want to
+believe them. But I also saw their face when the fragment escaped. They were afraid. Not of the fragment. Of something else.
+Something they are not telling us. I am beginning to understand: this is not a war. This is a prison break. And I am not sure
+whether we are freeing the prisoner or becoming its next cell."
+Stinger
+The map zooms out. The burning line traces from Salem to the Hudson, then continues westward. It reaches the Great
+Lakes—five vast bodies of water glittering like inland seas. The fragment's trajectory arcs toward the lakes.
+Text appears: "Season 3: The Iron Lakes"
+Beneath the map, the entity stirs in its sleep. For the first time, it makes a sound. Not a word. Not a scream. A hum. A
+vibration that travels up through the earth and into the bones of everyone standing on the western bank.
+The Witness looks down at their journal. The charcoal stick in their hand is vibrating.
+They keep writing.
+
+SEASON 3: THE IRON LAKES (Summary)
+Region: Great Lakes New Tier 3 Cards: None (first Tier 3 cards are on Season 1 and 2 anchors) Key Events:
+The escaped fragment reaches the Great Lakes before the factions do. It begins corrupting the region—animals mutate,
+weather patterns go mad, ships disappear on calm waters. The lakes are rich in iron, and the iron resonates with the
+fragment's energy, creating "iron storms" where the water itself becomes briefly magnetic.
+The factions arrive scattered. Some come by land. Some build or commandeer ships. Lake battles become a new form of
+warfare—ships firing not cannonballs but spells, boarding actions where cards are played on swaying decks.
+A faction schism occurs. The Oathbound split into two sub-factions: those who want to hunt the fragment and destroy it, led by
+the newly vocal Silver Vow-Keeper, and those who want to let it lead them to the next seal, believing the Jailer's explanation.
+The split is bitter and produces its own civil war within the larger war.
+The Witness touches the water of Lake Erie and has a vision. They see the full entity beneath the continent—a vast network of
+glowing veins stretching from the Atlantic to lands they can't name. The entity speaks for the first time. One word:
+"Remember."
+The climactic battle occurs on Lake Michigan. The fragment tries to possess a lake spirit—a luminous being of water and light.
+The factions, the Jailer, and the lake spirit itself fight the fragment in a four-way battle. The fragment is re-contained, bound
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 42
+
+into an iron cage. But the lake spirit is destroyed in the process, and the region is scarred.
+After the battle, the Jailer gives their confession. They were once human—the first European explorer to discover the entity,
+three hundred years ago. In exchange for the knowledge of the seals, their life was bound to them. They have been alive,
+unchanging, for three centuries. Maintaining the seals. Waiting. And now, breaking them.
+The season closes with the Witness's journal entry: "I saw it. The thing beneath. It stretches from the Atlantic to lands we
+haven't named yet. It is not evil. It is not good. It simply IS. And it is waking up."
+Stinger: The map zooms to the Mississippi River. Season 4: "The Heartland Rift."
+
+SEASON 4: THE HEARTLAND RIFT (Summary)
+Region: Mississippi River Valley Key Events:
+The Mississippi River is a major seal—the entity's "heart" is somewhere beneath it. The river is vast, muddy, and alive with its
+own magic. Riverboat battles replace lake battles. Agricultural magic emerges—practitioners who draw power from the rich
+soil of the floodplain, from the cycle of planting and harvest, from the deep time of the river.
+The Witness gains their first active magical ability. The entity-touch from their Lake Erie vision has left a mark. They can now
+"feel" the seals—sense when one is nearby and how close it is to breaking. This ability makes them invaluable to the factions,
+and also makes them a target. Everyone wants the Witness on their side.
+The Jailer appears more frequently now, sometimes fighting alongside the factions, sometimes working against them. Their
+motives remain ambiguous. They save lives and cause deaths with equal calm. The Witness begins keeping a separate section
+of their journal dedicated to the Jailer's actions, trying to discern a pattern.
+
+SEASON 5: SMOKE OVER APPALACHIA (Summary)
+Region: Appalachian Mountains New Tier 3 Card: Soul-Flame Pact (Dark Magic) Key Events:
+The war reaches the mountains. The Appalachians are old—older than the entity, older than the seals. Magic here is different:
+coal and smoke spirits, isolationist covens that have hidden in the hollows for generations, practitioners who speak with the
+bones of the mountains.
+The Jailer's full backstory is revealed in flashbacks. Three hundred years ago, they were an explorer—a cartographer sent to
+map the interior of the continent. They discovered the first seal by accident and, in their curiosity, broke it slightly. The entity
+spoke to them. Offered them a bargain: knowledge in exchange for service. The Jailer accepted. For three centuries, they have
+maintained the seals. But now the bargain is ending. The ten thousand years of sleep are almost over. The entity must wake, or
+die.
+A faction reunification begins. The Oathbound schism, started in Season 3, begins to heal. The Vow-Keeper and the rebel
+leader meet in secret and forge a new oath—one that acknowledges both the need to hunt fragments and the need to prepare
+for the entity's waking.
+
+SEASON 6: DELTA SUNDERING (Summary)
+Region: Bayou and Gulf Coast Key Events:
+The war reaches the southern territories—bayous, deltas, and the Gulf Coast. Swamp magic dominates: death and rebirth
+cycles, voodoo influences, practitioners who do not fear death because they have learned that in the swamp, nothing truly dies.
+The Witness dies. Killed during a battle in the bayou—a stray spell, a random moment of chaos. They are dead for three days.
+The factions mourn. The Jailer, uncharacteristically, is visibly shaken.
+And then the Witness returns. Not resurrected—transformed. Their skin is slightly translucent at the temples, revealing a faint
+blue-white glow beneath. They are now something between human and entity-touched. The entity speaks through them for the
+first time, in a voice that sounds like continents shifting: "Remember."
+The Witness's journal entries after their return are different. More poetic. More certain. They have seen something during
+those three days—been somewhere, spoken with something. They will not say what. But their guidance becomes more direct,
+more confident. They are no longer just an observer. They are a participant.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 43
+
+SEASON 7: THE LONE STAR CONVERGENCE
+(Summary)
+Region: Texas and Southwest New Tier 3 Card: Codex of Echoing Names (Spellbook) Key Events:
+The war reaches the Southwest—desert magic, mission churches, Comanche spiritual traditions. Multiple factions converge on
+the region simultaneously, creating a mega-alliance against the Jailer, who has become increasingly aggressive in breaking
+seals.
+The revelation: the entity chose to sleep. The seals were a bargain, not a cage. The first peoples of the continent did not
+imprison the entity—they made an agreement with it. The entity wanted to sleep, to dream, to gestate something that would
+take ten thousand years to form. It asked the first peoples to guard its sleep. They agreed, in exchange for the land's fertility
+and protection from the things that live beyond the veil. This changes everything. The Jailer is not freeing a prisoner. They are
+waking a volunteer. And the question becomes: what will the entity be like when it wakes? Ten thousand years of dreams could
+produce anything—wisdom, madness, or both.
+
+SEASON 8: ROCKY MOUNTAIN SCHISM (Summary)
+Region: Rocky Mountains Key Events:
+The war reaches the high country. High-altitude magic, isolation and transcendence, gold rush occultism. The mountains are
+the spine of the continent, and the seals here are different—more ancient, more powerful, less willing to be broken.
+The Jailer faces their final choice: help complete the awakening, or prevent it. Three hundred years of service have brought
+them to this point. They have spent the last eight seasons breaking seals. But now, at the highest point of the continent, they
+hesitate.
+They reveal to the player and the Witness: "I am tired. I have been tired for two hundred years. I want to rest. But if I stop
+now, the entity dies. And I do not know which is worse—its death or its waking. I have been hoping you would figure it out for
+me."
+The factions must also choose. Continue breaking seals, hoping the entity wakes benevolent? Or try to reinforce the remaining
+seals, risking the entity's death and the void that would follow?
+
+SEASON 9: THE GOLDEN VEIL (Summary)
+Region: California, West Coast Key Events:
+The final seal lies at the edge of the continent. Gold rush magic, Pacific energies, the last barrier between the entity and full
+wakefulness. All remaining Tier 3 signatures are now in play.
+The Witness, now a middle-aged veteran of a decade-long war, becomes a faction leader in their own right. They lead not with
+power but with knowledge—they have seen more of the entity than anyone alive. They have been touched by it. They have
+carried its voice in their throat. They know what it is, and what it is not.
+The climax approaches: all seals broken or breaking. The entity stirs beneath the continent. Everyone can feel it now—not just
+magic-users, but ordinary people. The ground hums. The ocean pulls back from the shore. The sky at sunset is the wrong color.
+The Pacific Veilkeepers—the guardians of the final seal—are introduced. They are the last line: an alliance of Chinese railroad
+workers, Hawaiian priests, Russian fur traders, and the indigenous peoples of the coast. They do not seek to win the war. They
+seek to ensure that when the entity rises, it rises on their terms.
+
+SEASON 10: THE NAMING OF THE LAND (Summary)
+Region: West Coast, the Final Seal Key Events:
+The entity rises. Not in a single moment of apocalyptic rupture, but slowly. The ground swells. The sky bends. The ocean at the
+edge of the continent begins to glow. The entity is not a creature that bursts from the earth. It IS the earth. It has always been
+the earth. The continent is its body. The seals were the lullaby that kept it sleeping.
+The final confrontation is not a battle. It is a choice, presented to the player and to the Witness. The entity is awake. It is
+disoriented. Its dreams—ten thousand years of accumulated imagery, memory, emotion—are spilling into the physical world. If
+it is not given form, it will remain formless, and its formlessness will reshape the continent in chaotic, unpredictable ways.
+Someone must name it. Naming gives form, and form gives limits. The Witness, who started as a terrified apprentice with a
+journal, is the only one who can do it. They know the entity. They have carried its voice. They have died and returned with its
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 44
+
+light behind their eyes.
+The player's choices across all ten seasons—which faction they supported, which seals they helped break or protect, how they
+treated the Jailer—determine the endings.
+Ending 1: The Benevolent Awakening. The Witness names the entity with understanding and compassion. The entity wakes
+fully, takes a recognizable form (a vast humanoid figure of living earth and light), and speaks. It thanks the factions for guiding
+its waking. It offers to continue the bargain: protection and fertility in exchange for respecting its rest-wake cycles. A new era
+begins.
+Ending 2: The Wrathful Awakening. The Witness names the entity with fear and accusation. The entity wakes angry—centuries
+of dreams twisted by the violence of the war, by the fragments that escaped, by the careless breaking of seals. It is not evil, but
+it is hurt. And a hurt continent is a dangerous thing. The factions must now manage a being of geological scale that does not
+trust them.
+Ending 3: The Witness's Sacrifice. The Witness does not name the entity. Instead, they merge with it—offering their own
+consciousness as the stabilizing form. The Witness ceases to exist as an individual. They become the entity's voice. The entity
+wakes, and when it speaks, it speaks with the Witness's voice, uses the Witness's words, remembers everything the Witness
+wrote. The journal becomes the entity's first memory of the surface world.
+Ending 4: The Jailer's Redemption. If the player supported the Jailer throughout, the Jailer offers their own name as the final
+seal. They have been bound to the seals for three centuries. They can become the final binding—not to keep the entity asleep,
+but to give it a stable anchor in the waking world. The Jailer merges with the final seal. The entity wakes. The Jailer is
+gone—but their silver clasp remains, embedded in the earth where the final seal was, catching the sunrise.
+Final Image: The North American continent, seen from above. The entity's form—whatever it has become—is visible as a
+pattern of light beneath the land. The war is over. What comes next is not a battle. It is a relationship. The continent is alive.
+And it remembers.
+
+Salem Arcana - V9 Full Engineer QC Rebuild
+
+Page 45
+
+
